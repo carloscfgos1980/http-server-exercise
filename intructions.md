@@ -1,4 +1,4 @@
-# 1. Server
+# 1.1 Server
 
 We're building a fully-fledged web server from scratch on your local machine. The test suite will make HTTP requests to your local server over localhost. Your server will run in one terminal, while you submit tests with the Boot.dev CLI in another terminal.
 
@@ -29,7 +29,7 @@ Open <http://localhost:8080> in your browser. You should see a 404 error because
 Being a programmer means reading documentation and searching for examples. This is an essential skill because a professional in any field should never stop learning. In fact, the best way to learn is on the clock. Check out the docs provided for examples and be sure to read the http package's Overview as a primer.
 Run and submit the CLI tests using the Boot.dev CLI tool in another terminal window while your server is still running.
 
-# 2. Fileservers
+# 1.2 Fileservers
 
 A fileserver is a kind of simple web server that serves static files from the host machine. Fileservers are often used to serve static assets for a website, things like:
 
@@ -53,3 +53,192 @@ Use a standard http.FileServer as the handler
 Use http.Dir to convert a filepath (in our case a dot: . which indicates the current directory) to a directory for the http.FileServer.
 Re-build and run your server
 Test your server by visiting <http://localhost:8080> in your browser
+
+# 1.3 Serving Images
+
+You may be wondering how the fileserver knew to serve the index.html file to the root of the server. It's such a common convention on the web to use a file called index.html to serve the webpage for a given path, that the Go standard library's FileServer does it automatically.
+
+When using a standard fileserver, the path to a file on disk is the same as its URL path. An exception is that index.html is served from / instead of /index.html.
+
+Try It Out
+Run your chirpy server again, and open <http://localhost:8080/index.html> in a new browser tab. You'll notice that you're redirected to <http://localhost:8080/>.
+
+This works for all directories, not just the root!
+
+For example:
+
+/index.html will be served from /
+/pages/index.html will be served from /pages
+/pages/about/index.html will be served from /pages/about
+Alternatively, try opening a URL that doesn't exist, like <http://localhost:8080/doesntexist.html>. You'll see that the fileserver returns a 404 error.
+
+Assignment
+Let's serve another type of file from our server: an image. Chirpy has a slick logo, and we need to serve it so that our users can load it in their browsers and mobile apps.
+
+Download the Chirpy logo from below and add it to your project directory.
+
+Configure its filepath so that it's accessible from this URL:
+
+<http://localhost:8080/assets/logo.png>
+
+
+# 1.4 Workflow Tips
+
+Servers are interesting because they're always running. A lot of the code we've written in Boot.dev up to this point has acted more like a command line tool: it runs, does its thing, and then exits.
+
+Servers are different. They run forever, waiting for requests to come in, processing them, sending responses, and then waiting for the next request. If they didn't work this way, websites and apps would be down and unavailable all the time!
+
+Debugging a Server
+Debugging a CLI app is simple:
+
+Write some code.
+Build and run the code.
+See if it did what you expected.
+If it didn't, add some logging or fix the code, and go back to step 2.
+Debugging a server is a little different. The simplest way (minimal tooling) is to:
+
+Write some code.
+Build and run the code.
+Send a request to the server using a browser or some other HTTP client.
+See if it did what you expected.
+If it didn't, add some logging or fix the code, and go back to step 2.
+Make sure you're testing your server by hitting endpoints in the browser before submitting your answers.
+
+Restarting a Server
+I usually use a single command to build and run my servers, assuming I'm in my main package directory:
+
+go run .
+
+This builds the server and runs it in one command.
+
+To stop the server, I use ctrl+c. This sends a signal to the server, telling it to stop. The server then exits.
+
+To start it again, I just run the same command.
+
+Alternatively, you can compile a binary and run it instead
+
+go build -o out && ./out
+
+CLI Tip
+If you didn't know, you can continuously press the up arrow key on the command line to see the commands you've previously run. That way you don't need to re-type commands that you use often!
+
+
+# 1.5 Custom Handlers
+
+In the previous exercise, we used the http.FileServer function, which simply returns a built-in http.Handler.
+
+An http.Handler is just an interface:
+
+type Handler interface {
+ ServeHTTP(ResponseWriter, *Request)
+}
+
+Any type with a ServeHTTP method that matches the http.HandlerFunc signature above is an http.Handler. Take a second to think about it: it makes a lot of sense! To handle an incoming HTTP request, all a function needs is a way to write a response and the request itself.
+
+Assignment
+Let's add a readiness endpoint to the Chirpy server! Readiness endpoints are commonly used by external systems to check if our server is ready to receive traffic.
+
+The endpoint should be accessible at the /healthz path using any HTTP method.
+
+The endpoint should simply return a 200 OK status code indicating that it has started up successfully and is listening for traffic. The endpoint should return a Content-Type: text/plain; charset=utf-8 header, and the body will contain a message that simply says "OK" (the text associated with the 200 status code).
+
+Later this endpoint can be enhanced to return a 503 Service Unavailable status code if the server is not ready.
+
+1. Add the Readiness Endpoint
+I recommend using the mux.HandleFunc to register your handler. Your handler can just be a function that matches the signature of http.HandlerFunc:
+
+func(http.ResponseWriter, *http.Request)
+
+Your handler should do the following:
+
+Write the Content-Type header
+Write the status code using w.WriteHeader
+Write the body text using w.Write
+2. Update the Fileserver Path
+Now that we've added a new handler, we don't want potential conflicts with the fileserver handler. Update the fileserver to use the /app/ path instead of /.
+
+Not only will you need to mux.Handle the /app/ path, you'll also need to strip the /app prefix from the request path before passing it to the fileserver handler. You can do this using the http.StripPrefix function.
+
+# 1.6 Handler Review
+
+Handler
+An http.Handler is any defined type that implements the set of methods defined by the Handler interface, specifically the ServeHTTP method.
+
+type Handler interface {
+ ServeHTTP(ResponseWriter, *Request)
+}
+
+The ServeMux you used in the previous exercise is an http.Handler.
+
+You will typically use a Handler for more complex use cases, such as when you want to implement a custom router, middleware, or other custom logic.
+
+HandlerFunc
+type HandlerFunc func(ResponseWriter, *Request)
+
+You'll typically use a HandlerFunc when you want to implement a simple handler. The HandlerFunc type is just a function that matches the ServeHTTP signature above.
+
+Why This Signature?
+The Request argument is fairly obvious: it contains all the information about the incoming request, such as the HTTP method, path, headers, and body.
+
+The ResponseWriter is less intuitive in my opinion. The response is an argument, not a return type. Instead of returning a value all at once from the handler function, we write the response to the ResponseWriter.
+
+
+# 2.1 Middleware
+
+Middleware is a way to wrap a handler with additional functionality. It is a common pattern in web applications that allows us to write DRY code.
+
+For example, we can write a middleware that logs every request to the server. We can then wrap our handler with this middleware and every request will be logged without us having to write the logging code in every handler.
+
+To do that, we can write the middleware function like this:
+
+func middlewareLog(next http.Handler) http.Handler {
+ return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+  log.Printf("%s %s", r.Method, r.URL.Path)
+  next.ServeHTTP(w, r)
+ })
+}
+
+Then, any handler that needs logging can be wrapped by this middleware function:
+
+mux.Handle("/app/", middlewareLog(handler))
+
+
+# 2.2 Stateful Handlers
+
+It's frequently useful to have a way to store and access state in our handlers. For example, we might want to keep track of the number of requests we've received, or we may want to pass around an open connection to a database, or credentials to an API.
+
+Assignment
+The product managers at Chirpy want to know how many requests are being made to serve our homepage - in essence, they want to know how many people are viewing the site!
+
+They have asked for a simple HTTP endpoint they can hit to get the number of requests that have been processed. It will return the count as plain text in the response body.
+
+For now, they just want the number of requests that have been processed since the last time the server was started, we don't need to worry about saving the data between restarts.
+
+Steps
+Create a struct in main.go that will hold any stateful, in-memory data we'll need to keep track of. In our case, we just need to keep track of the number of requests we've received.
+type apiConfig struct {
+ fileserverHits atomic.Int32
+}
+
+The atomic.Int32 type is a really cool standard-library type that allows us to safely increment and read an integer value across multiple goroutines (HTTP requests).
+
+Next, write a new middleware method on a *apiConfig that increments the fileserverHits counter every time it's called. Here's the method signature I used:
+func (cfg*apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
+ // ...
+}
+
+The atomic.Int32 type has an .Add() method, use it to safely increment the number of fileserverHits.
+
+Wrap the http.FileServer handler with the middleware method we just wrote. For example:
+mux.Handle("/app/", apiCfg.middlewareMetricsInc(handler))
+
+Create a new handler that writes the number of requests that have been counted as plain text in this format to the HTTP response:
+Hits: x
+
+Where x is the number of requests that have been processed. This handler should be a method on the *apiConfig struct so that it can access the fileserverHits data.
+
+Register that handler with the serve mux on the /metrics path.
+Finally, create and register a handler on the /reset path that, when hit, will reset your fileserverHits back to 0.
+It should follow the same design as the previous handlers.
+
+Remember, similar to the metrics endpoint, /reset will need to be a method on the *apiConfig struct so that it can also access the fileserverHits
