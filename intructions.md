@@ -242,3 +242,52 @@ Finally, create and register a handler on the /reset path that, when hit, will r
 It should follow the same design as the previous handlers.
 
 Remember, similar to the metrics endpoint, /reset will need to be a method on the *apiConfig struct so that it can also access the fileserverHits
+
+# 2.3 Routing
+
+The Go standard library has a lot of powerful HTTP features and, as of version 1.22, comes equipped with method-based pattern matching for routing.
+
+In this lesson, we are going to limit which endpoints are available via which HTTP methods. In our current implementation, we can use any HTTP method to access any endpoint. This is not ideal.
+
+There are powerful routing libraries like Gorilla Mux and Chi, however, the course will assume you are using Go's standard library. Just know that it isn't your only option!
+Try It!
+Run this command to send an empty POST request to your running server:
+
+curl -X POST <http://localhost:8080/healthz>
+
+You should get an OK response - but we want this endpoint to only be available via GET requests!
+
+Method Specific Routing
+Using the Go standard library, you can specify a method like this: [METHOD ][HOST]/[PATH]. For example:
+
+mux.HandleFunc("POST /articles", handlerArticlesCreate)
+mux.HandleFunc("DELETE /articles", handlerArticlesDelete)
+
+Assignment
+Update the following paths to only accept GET requests:
+/healthz
+/metrics
+When a request is made to one of these endpoints with a method other than GET, the server should return a 405 (Method Not Allowed) response (this is handled automatically!).
+
+Update the /reset endpoint to only accept POST requests.
+
+# 2.4 Patterns
+
+A pattern is a string that specifies the set of URL paths that should be matched to handle HTTP requests. Go's ServeMux router uses these patterns to dispatch requests to the appropriate handler functions based on the URL path of the request. As we saw in the previous lesson, patterns help organize the handling of different routes efficiently.
+
+As previously mentioned, patterns generally look like this: [METHOD ][HOST]/[PATH]. Note that all three parts are optional.
+
+Rules and Definitions
+Fixed URL Paths
+A pattern that exactly matches the URL path. For example, if you have a pattern /about, it will match the URL path /about and no other paths.
+
+Subtree Paths
+If a pattern ends with a slash /, it matches all URL paths that have the same prefix. For example, a pattern /images/ matches /images/, /images/logo.png, and /images/css/style.css. As we saw with our /app/ path, this is useful for serving a directory of static files or for structuring your application into sub-sections.
+
+Longest Match Wins
+If more than one pattern matches a request path, the longest match is chosen. This allows more specific handlers to override more general ones. For example, if you have patterns / (root) and /images/, and the request path is /images/logo.png, the /images/ handler will be used because it's the longest match.
+
+Host-Specific Patterns
+We won't be using this but be aware that patterns can also start with a hostname (e.g., <www.example.com/>). This allows you to serve different content based on the Host header of the request. If both host-specific and non-host-specific patterns match, the host-specific pattern takes precedence.
+
+If you're interested, you can read more in the ServeMux docs.
