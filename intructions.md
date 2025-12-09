@@ -406,3 +406,110 @@ If you want to be able to scale your application up and down in specific ways, o
 
 Don't Worry About All This Stuff!
 I'm trying to gently introduce you to some popular technologies and how they work together, but you don't need to memorize all of these products and options.
+
+# 4. HTTP Clients
+
+# 4,1 HTTP Clients
+
+So far, you have probably been using a browser to test your server. That works fine with simple GET requests (the kind of request a browser sends when you type a URL into the address bar), but it's not very useful for any other HTTP methods or requests with custom headers and bodies.
+
+Debugging Your Endpoints
+Servers are built to be used by clients. As you develop your code, you should be using a tool that makes sending one-off requests to your server easy! Here are some of my favorites:
+
+REST Client for VS Code
+Postman for VS Code
+cURL
+Postman
+Use whichever client you like, but make sure you're using one!
+
+# 4.2 JSON
+
+Hopefully, by now you already know what JSON is. If not, you should go back and take the Learn HTTP Clients course here first.
+
+What you may be new to is handling and parsing JSON on the server side, rather than sending it as a client.
+
+If you want to take a super deep dive into JSON in Go, then you can read this post here. With that in mind, you don't need to! I'll give you the relevant info below.
+
+Decode JSON Request Body
+It's very common for POST requests to send JSON data in the request body. Here's how you can handle that incoming data:
+
+{
+  "name": "John",
+  "age": 30
+}
+
+func handler(w http.ResponseWriter, r *http.Request){
+    type parameters struct {
+        Name string `json:"name"`
+        Age int `json:"age"`
+    }
+
+    decoder := json.NewDecoder(r.Body)
+    params := parameters{}
+    err := decoder.Decode(&params)
+    if err != nil {
+  log.Printf("Error decoding parameters: %s", err)
+  w.WriteHeader(500)
+  return
+    }
+    // params is a struct with data populated successfully
+    // ...
+}
+
+The struct tags (e.g., `json:"name"`) indicate how the keys in the JSON should be mapped to the struct fields. The struct fields themselves must be exported (start with a capital letter) if you want them parsed.
+
+decoder.Decode() will return an error if the JSON is invalid or has the wrong types, and any missing fields will simply have their values in the struct set to their zero value.
+
+Encode JSON Response Body
+func handler(w http.ResponseWriter, r *http.Request){
+    // ...
+
+    type returnVals struct {
+        CreatedAt time.Time `json:"created_at"`
+        ID int `json:"id"`
+    }
+    respBody := returnVals{
+        CreatedAt: time.Now(),
+        ID: 123,
+    }
+    dat, err := json.Marshal(respBody)
+ if err != nil {
+   log.Printf("Error marshalling JSON: %s", err)
+   w.WriteHeader(500)
+   return
+ }
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(200)
+    w.Write(dat)
+}
+
+Again, we use struct tags to specify how the field names will be encoded in the JSON data. If you omit the tags, the keys will be encoded as the same names of struct fields (e.g., CreatedAt, ID).
+
+Assignment
+At Chirpy, we have a silly rule that says all Chirps must be 140 characters long or less.
+
+Add a new endpoint to the Chirpy API that accepts a POST request at /api/validate_chirp. It should expect a JSON body of this shape:
+
+{
+  "body": "This is an opinion I need to share with the world"
+}
+
+If any errors occur, it should respond with an appropriate HTTP status code and a JSON body of this shape:
+
+{
+  "error": "Something went wrong"
+}
+
+For example, if the Chirp is too long, respond with a 400 code and this body:
+
+{
+  "error": "Chirp is too long"
+}
+
+If the Chirp is valid, respond with a 200 code and this body:
+
+{
+  "valid": true
+}
+
+The JSON here has been prettified. The actual response body won't have newlines or spaces between the key and value. They'll look more like {"valid":true}
