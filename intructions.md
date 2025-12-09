@@ -513,3 +513,204 @@ If the Chirp is valid, respond with a 200 code and this body:
 }
 
 The JSON here has been prettified. The actual response body won't have newlines or spaces between the key and value. They'll look more like {"valid":true}
+
+# 4.3 The Profane
+
+Not only do we validate that Chirps are under 140 characters, but we also have a list of words that are not allowed.
+
+Assignment
+We need to update the /api/validate_chirp endpoint to replace all "profane" words with 4 asterisks: ****.
+
+Assuming the length validation passed, replace any of the following words in the Chirp with the static 4-character string ****:
+
+kerfuffle
+sharbert
+fornax
+Be sure to match against uppercase versions of the words as well, but not punctuation. "Sharbert!" does not need to be replaced, we'll consider it a different word due to the exclamation point. Finally, instead of the valid boolean, your handler should return the cleaned version of the text in a JSON response:
+
+Example Input
+{
+  "body": "This is a kerfuffle opinion I need to share with the world"
+}
+
+Example Output
+{
+  "cleaned_body": "This is a **** opinion I need to share with the world"
+}
+
+Run and submit the CLI tests.
+
+Tips
+Use an HTTP client to test your POST requests.
+
+I'd recommend creating two helper functions:
+
+respondWithError(w http.ResponseWriter, code int, msg string)
+respondWithJSON(w http.ResponseWriter, code int, payload interface{})
+These helpers are not required but might help DRY up your code when we add more endpoints in the future.
+
+I'd also recommend breaking the bad word replacement into a separate function. You can even write some unit tests for it!
+
+Here are some useful standard library functions:
+
+strings.ToLower
+strings.Split
+strings.Join
+
+
+# 5. STORAGE
+
+# 5.1 Storage
+
+Arguably the most important part of your typical web application is the storage of data. It would be pretty useless if each time you logged into your account on YouTube, Twitter or GitHub, all of your subscriptions, tweets, or repositories were gone.
+
+Memory vs. Disk
+When you run a program on your computer (like our HTTP server), the program is loaded into memory. Memory is a lot like a scratch pad. It's fast, but it's not permanent. If the program terminates or restarts, the data in memory is lost.
+
+When you're building a web server, any data you store in memory (in your program's variables) is lost when the server is restarted. Any important data needs to be saved to disk via the file system.
+
+Option 1: Raw Files
+We could take our user's data, serialize it to JSON, and save it to disk in .json files (or any other format for that matter). It's simple, and will even work for small applications. Trouble is, it will run into problems fast:
+
+Concurrency: If two requests try to write to the same file at the same time, you'll get overwritten data.
+Scalability: It's not efficient to read and write large files to disk for every request.
+Complexity: You'll have to write a lot of code to manage the files, and the chances of bugs are high.
+Option 2: a Database
+At the end of the day, a database technology like MySQL, PostgreSQL, or MongoDB "just" writes files to disk. The difference is that they also come with all the fancy code and algorithms that make managing those files efficient and safe. In the case of a SQL database, the files are abstracted away from us entirely. You just write SQL queries and let the DB handle the rest.
+
+We will be using option 2: PostgreSQL. It's a production-ready, open-source SQL database. It's a great choice for many web applications, and as a back-end engineer, it might be the single most important database to be familiar with.
+
+Assignment
+Install Postgres v15 or later.
+macOS with brew
+
+brew install postgresql@15
+
+Linux / WSL (Debian). Here are the docs from Microsoft, but simply:
+
+sudo apt update
+sudo apt install postgresql postgresql-contrib
+
+Ensure the installation worked. The psql command-line utility is the default client for Postgres. Use it to make sure you're on version 15+ of Postgres:
+psql --version
+
+(Linux only) Update postgres password:
+sudo passwd postgres
+
+Enter a password, and be sure you won't forget it. You can just use something easy like postgres.
+
+Start the Postgres server in the background
+Mac: brew services start postgresql@15
+Linux: sudo service postgresql start
+Connect to the server. I recommend simply using the psql client. It's the "default" client for Postgres, and it's a great way to interact with the database. While it's not as user-friendly as a GUI like PGAdmin, it's a great tool to be able to do at least basic operations with.
+Enter the psql shell:
+
+Mac: psql postgres
+Linux: sudo -u postgres psql
+You should see a new prompt that looks like this:
+
+postgres=#
+
+Create a new database. I called mine chirpy:
+CREATE DATABASE chirpy;
+
+Connect to the new database:
+\c chirpy
+
+You should see a new prompt that looks like this:
+
+chirpy=#
+
+Set the user password (Linux only)
+ALTER USER postgres WITH PASSWORD 'postgres';
+
+For simplicity, I used postgres as the password. Before, we altered the system user's password, now we're altering the database user's password.
+
+Query the database
+From here you can run SQL queries against the chirpy database. For example, to see the version of Postgres you're running, you can run:
+
+SELECT version();
+
+# 5.2 Goose Migrations
+
+Goose is a database migration tool written in Go. It runs migrations from a set of SQL files, making it a perfect fit for this project (we wanna stay close to the raw SQL).
+
+What Is a Migration?
+A migration is just a set of changes to your database table. You can have as many migrations as needed as your requirements change over time. For example, one migration might create a new table, one might delete a column, and one might add 2 new columns.
+
+An "up" migration moves the state of the database from its current schema to the schema that you want. So, to get a "blank" database to the state it needs to be ready to run your application, you run all the "up" migrations.
+
+If something breaks, you can run one of the "down" migrations to revert the database to a previous state. "Down" migrations are also used if you need to reset a local testing database to a known state.
+
+Users
+Our API needs to support the standard CRUD operations for "users" - the people logging into and using our application.
+
+Assignment
+Install Goose.
+Goose is just a command line tool that happens to be written in Go. I recommend installing it using go install:
+
+go install github.com/pressly/goose/v3/cmd/goose@latest
+
+Run goose -version to make sure it's installed correctly.
+
+Create a users migration in a new sql/schema directory.
+A "migration" in Goose is just a .sql file with some SQL queries and some special comments. Our first migration should just create a users table. The simplest format for these files is:
+
+number_name.sql
+
+For example, I created a file in sql/schema called 001_users.sql with the following contents:
+
+-- +goose Up
+CREATE TABLE ...
+
+-- +goose Down
+DROP TABLE users;
+
+Write out the CREATE TABLE statement in full, I left it blank for you to fill in. A user should have 4 fields:
+
+id: a UUID that will serve as the primary key
+created_at: a TIMESTAMP that can not be null
+updated_at: a TIMESTAMP that can not be null
+email: TEXT that can not be null and must be unique
+The -- +goose Up and -- +goose Down comments are required. They tell Goose how to run the migration in each direction.
+
+Get your connection string. A connection string is just a URL with all of the information needed to connect to a database. The format is:
+protocol://username:password@host:port/database
+
+Here are examples:
+
+macOS (no password, your username): postgres://wagslane:@localhost:5432/chirpy
+Linux (password from last lesson, postgres user): postgres://postgres:postgres@localhost:5432/chirpy
+Test your connection string by running psql, for example:
+
+psql "postgres://wagslane:@localhost:5432/chirpy"
+
+It should connect you to the chirpy database directly. If it's working, great. exit out of psql and save the connection string.
+
+Run the up migration.
+cd into the sql/schema directory and run:
+
+goose postgres <connection_string> up
+
+# example
+
+# goose postgres "postgres://wagslane:@localhost:5432/chirpy" up
+
+Run your migration! Make sure it works by using psql to find your newly created users table:
+
+psql chirpy
+\dt
+
+Run the down migration to make sure it works (it should just drop the table).
+When you're satisfied, run the up migration again to recreate the table.
+
+
+
+
+
+
+
+
+psql "postgres://carlosinfante:@localhost:5432/chirpy"
+
+goose -dir sql/schema postgres "postgres://carlosinfante:@localhost:5432/chirpy" up
