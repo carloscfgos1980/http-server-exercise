@@ -692,10 +692,10 @@ cd into the sql/schema directory and run:
 
 goose postgres <connection_string> up
 
-# example
+example
 
-# goose postgres "postgres://wagslane:@localhost:5432/chirpy" up
-
+<goose postgres "postgres://wagslane:@localhost:5432/chirpy" up
+>
 Run your migration! Make sure it works by using psql to find your newly created users table:
 
 psql chirpy
@@ -706,9 +706,127 @@ When you're satisfied, run the up migration again to recreate the table.
 
 
 
+# 5.3 SQLC
 
+SQLC is an amazing Go program that generates Go code from SQL queries. It's not exactly an ORM, but rather a tool that makes working with raw SQL easy and type-safe.
 
+We will be using Goose to manage our database migrations (the schema). We'll be using SQLC to generate Go code that our application can use to interact with the database (run queries).
 
+Assignment
+Install SQLC.
+SQLC is just a command line tool, it's not a package that we need to import. I recommend installing it using go install. Installing Go CLI tools with go install is easy and ensures compatibility with your Go environment.
+
+go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
+
+Then run sqlc version to make sure it's installed correctly.
+
+Configure SQLC. You'll always run the sqlc command from the root of your project. Create a file called sqlc.yaml in the root of your project. Here is mine:
+version: "2"
+sql:
+
+- schema: "sql/schema"
+    queries: "sql/queries"
+    engine: "postgresql"
+    gen:
+      go:
+        out: "internal/database"
+
+We're telling SQLC to look in the sql/schema directory for our schema structure (which is the same set of files that Goose uses, but sqlc automatically ignores "down" migrations), and in the sql/queries directory for queries. We're also telling it to generate Go code in the internal/database directory.
+
+Write a query to create a user. Inside the sql/queries directory, create a file called users.sql. Here's the format:
+-- name: CreateUser :one
+INSERT INTO users (id, created_at, updated_at, email)
+VALUES (
+    ...
+)
+RETURNING *;
+
+We'll be using UUIDs for ID values, so you can use gen_random_uuid() to generate a new UUID.
+The created_at and updated_at fields should be set to the current timestamp. In Postgres, you can use NOW() to get the current timestamp.
+The email should be passed in by our application. Use $1 to represent the first parameter passed into the query. (in future queries, we'll use $2, $3, etc. for additional parameters)
+The :one at the end of the query name tells SQLC that we expect to get back a single row (the created user).
+
+Keep the SQLC postgres docs handy, you'll probably need to refer to them again later.
+
+Generate the Go code. Run sqlc generate from the root of your project. It should create a new package of go code in internal/database. You'll notice that the generated code relies on Google's uuid package, so you'll need to add that to your module:
+go get github.com/google/uuid
+
+Import a PostgreSQL driver.
+We need to add and import a Postgres driver so our program knows how to talk to the database. Install it in your module:
+
+go get github.com/lib/pq
+
+Add this import to the top of your main.go file:
+
+import _ "github.com/lib/pq"
+
+This is one of my least favorite things working with SQL in Go currently. You have to import the driver, but you don't use it directly anywhere in your code. The underscore tells Go that you're importing it for its side effects, not because you need to use it.
+Create a .env file in the root of your project:
+DB_URL="YOUR_CONNECTION_STRING_HERE"
+
+Add it to your .gitignore file. It's incredibly insecure to commit secret keys to a Git repo.
+You would never use a plain text .env file in a production environment, but for local development of a personal project, you're fine.
+Add a query parameter to the end of the connection string to disable SSL, e.g. postgres://wagslane:@localhost:5432/chirpy?sslmode=disable.
+
+go get github.com/joho/godotenv, then call godotenv.Load() at the beginning of your main() function to load the .env file into your environment variables. Then you can use os.Getenv to get the DB_URL from the environment:
+dbURL := os.Getenv("DB_URL")
+
+Next, sql.Open() a connection to your database:
+db, err := sql.Open("postgres", dbURL)
+
+Make sure all packages used are imported at the top.
+Use your SQLC generated database package to create a new *database.Queries, and store it in your apiConfig struct so that handlers can access it:
+
+dbQueries := database.New(db)
+
+# 5.4 Create User
+
+We've written the SQL query, now it's time to write the API handler that will allow users to create a new user.
+
+The Context Package
+The context package is a part of Go's standard library. It does several things, but the most important thing is that it handles timeouts. All of SQLC's database queries accept a context.Context as their first argument:
+
+user, err := cfg.db.CreateUser(r.Context(), params.Email)
+
+By passing your handler's http.Request.Context() to the query, the library will automatically cancel the database query if the HTTP request is canceled or times out.
+
+The benefit is that it will save your server from getting bogged down by long-running queries!
+
+Assignment
+Add a new endpoint to your server POST /api/users that allows users to be created. It accepts an email as JSON in the request body and returns the user's ID, email, and timestamps in the response body.
+Request:
+
+{
+  "email": "<user@example.com>"
+}
+
+Response:
+
+HTTP 201 Created
+
+{
+  "id": "50746277-23c6-4d85-a890-564c0044c2fb",
+  "created_at": "2021-07-07T00:00:00Z",
+  "updated_at": "2021-07-07T00:00:00Z",
+  "email": "<user@example.com>"
+}
+
+Update the POST /admin/reset endpoint to delete all users in the database (but don't mess with the schema). You'll need a new SQLC query for this. Add a new value to your .env file called PLATFORM and set it equal to "dev". Read it into your apiConfig. If PLATFORM is not equal to "dev", this endpoint should return a 403 Forbidden. This ensures that this extremely dangerous endpoint can only be accessed in a local development environment.
+Run and submit the CLI tests.
+
+Tips
+I created a User struct in my main package. When the database package returns a database.User, I map it to my main package's User struct before marshalling it to JSON so that I can control the JSON keys:
+
+type User struct {
+ ID        uuid.UUID `json:"id"`
+ CreatedAt time.Time `json:"created_at"`
+ UpdatedAt time.Time `json:"updated_at"`
+ Email     string    `json:"email"`
+}
+
+Alternatively, you can use the 'emit_json_tags` configuration option to automatically include the JSON tags. However, in larger projects, this may be more restrictive than useful.
+
+# 
 
 
 psql "postgres://carlosinfante:@localhost:5432/chirpy"
