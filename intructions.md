@@ -826,6 +826,106 @@ type User struct {
 
 Alternatively, you can use the 'emit_json_tags` configuration option to automatically include the JSON tags. However, in larger projects, this may be more restrictive than useful.
 
+# 5.5 Create Chirp
+
+Our API needs to support standard CRUD operations for "chirps". A "chirp" is just a short message that a user can post to the API, like a tweet.
+
+Assignment
+Add a POST /api/chirps handler. It accepts a JSON payload with a body field:
+{
+  "body": "Hello, world!",
+  "user_id": "123e4567-e89b-12d3-a456-426614174000"
+}
+
+Delete the /api/validate_chirp endpoint that we created before, but port all that logic into this one. Users should not be allowed to create invalid chirps!
+
+If the chirp is valid, you should save it in the database with:
+A new random id: A UUID
+created_at: A non-null timestamp
+updated_at: A non null timestamp
+body: A non-null string
+user_id: This should reference the id of the user who created the chirp, and ON DELETE CASCADE, which will cause a user's chirps to be deleted if the user is deleted.
+You'll need a new up/down migration for this table.
+
+As a general rule it's always a good idea to use created_at and updated_at timestamps for all your resources. It gives you a nice audit trail and makes it easier to debug issues.
+If creating the record goes well, respond with a 201 status code and the full chirp resource:
+{
+  "id": "94b7e44c-3604-42e3-bef7-ebfcc3efff8f",
+  "created_at": "2021-01-01T00:00:00Z",
+  "updated_at": "2021-01-01T00:00:00Z",
+  "body": "Hello, world!",
+  "user_id": "123e4567-e89b-12d3-a456-426614174000"
+}
+
+Yes, this isn't secure because it means any user can create a chirp on behalf of any other user. We'll fix that in a future assignment.
+
+Run and submit the CLI tests.
+
+
+# 5.6 Collections and Singletons
+
+We're building a fairly RESTful API.
+
+REST is a set of guidelines for how to build APIs. It's not a standard, but it's a set of conventions that many people follow. Not all back-end APIs are RESTful, but many are. As a back-end developer, you'll need to know how to build RESTful APIs.
+
+Collections and Singletons
+In REST, it's conventional to name all of your endpoints after the resource that they represent and for the name to be plural. That's why we use POST /api/chirps to create a new chirp instead of POST /api/chirp.
+
+To get a collection of resources it's conventional to use a GET request to the plural name of the resource. So we are going to use GET /api/chirps to get all of the chirps.
+
+To get a singleton, or a single instance of a resource, it's conventional to use a GET request to the plural name of the resource, followed by the ID of the resource. So we are going to use GET /api/chirps/94b7e44c-3604-42e3-bef7-ebfcc3efff8f to get the chirp with ID 94b7e44c-3604-42e3-bef7-ebfcc3efff8f.
+
+# 5.7 Get All Chirps
+
+We need a way to retrieve all the chirps from the database. Later, we'll add sorting and filtering functionality, but you can think of this as a very basic version of an endpoint that might serve a timeline of chirps.
+
+Assignment
+Add a new query that retrieves all chirps in ascending order by created_at.
+Add a GET /api/chirps endpoint that returns all chirps in the database. It should return them in the same structure as the POST /api/chirps endpoint, but as an array. Use a 200 status code for success. Order them by created_at in ascending order.
+[
+  {
+    "id": "94b7e44c-3604-42e3-bef7-ebfcc3efff8f",
+    "created_at": "2021-01-01T00:00:00Z",
+    "updated_at": "2021-01-01T00:00:00Z",
+    "body": "Yo fam this feast is lit ong",
+    "user_id": "123e4567-e89b-12d3-a456-426614174000"
+  },
+  {
+    "id": "f0f87ec2-a8b5-48cc-b66a-a85ce7c7b862",
+    "created_at": "2022-01-01T00:00:00Z",
+    "updated_at": "2023-01-01T00:00:00Z",
+    "body": "What's good king?",
+    "user_id": "123e4567-e89b-12d3-a456-426614174000"
+  }
+]
+
+
+# 5.8 Get Chirp
+
+Now we need a way to lookup a single chirp by its ID. You might be thinking:
+
+"If I can get all of the chirps, why do I need a way to get just one?"
+Imagine there are 10,000 chirps in the database - no, imagine 10,000,000,000! We'll obviously need to change our GET /api/chirps endpoint to only return a subset of chirps at a time.
+
+However, our users will still need a way to view a single chirp - for example, maybe they have a link directly to it.
+
+Assignment
+Add a GET /api/chirps/{chirpID} endpoint that returns a single chirp by its ID. The chirp ID will be passed in as a path parameter. For example:
+GET /api/chirps/94b7e44c-3604-42e3-bef7-ebfcc3efff8f
+
+You can get the string value of the path parameter like in Go with the http.Request.PathValue method.
+
+If the chirp is found, return it like so with a 200 code:
+{
+  "id": "94b7e44c-3604-42e3-bef7-ebfcc3efff8f",
+  "created_at": "2021-01-01T00:00:00Z",
+  "updated_at": "2021-01-01T00:00:00Z",
+  "body": "fr? no clowning?",
+  "user_id": "123e4567-e89b-12d3-a456-426614174000"
+}
+
+Otherwise, return a 404.
+
 # 
 
 
