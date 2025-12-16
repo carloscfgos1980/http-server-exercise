@@ -1202,7 +1202,47 @@ A new password and email in the request body
 Hash the password, then update the hashed password and the email for the authenticated user in the database. Respond with a 200 if everything is successful and the newly updated User resource (omitting the password of course).
 If the access token is malformed or missing, respond with a 401 status code.
 
-# 7.2
+# 8 WEBHOOKS
+
+# 8.1 Webhooks
+
+Webhooks sound like a scary advanced concept, but they're quite simple.
+
+A webhook is just an event that's sent to your server by an external service when something happens.
+
+For example, here at Boot.dev we use Stripe as a third-party payment processor. When a student makes a payment, Stripe sends a webhook to the Boot.dev servers so that we can unlock the student's membership.
+
+Student makes a payment to stripe
+Stripe processes the payment
+If the payment is successful, Stripe sends an HTTP POST request to <https://api.boot.dev/stripe/webhook> (that's not the real URL, but you get the idea)
+That's it! The only real difference between a webhook and a typical HTTP request is that the system making the request is an automated system, not a human loading a webpage or web app. As such, webhook handlers must be idempotent because the system on the other side may retry the request multiple times.
+
+Idempo... What?
+Idempotent, or "idempotence", is a fancy word that means "the same result no matter how many times you do it". For example, your typical POST /api/chirps (create a chirp) endpoint will not be idempotent. If you send the same request twice, you'll end up with two chirps with the same information but different IDs.
+
+Webhooks, on the other hand, should be idempotent, and it's typically easy to build them this way because the client sends some kind of "event" and usually provides its own unique ID.
+
+Assignment
+We recently rolled out a new feature called "Chirpy Red". It's a membership program, and members of "Chirpy Red" get pretty incredible features: like the ability to edit chirps after posting them. But that's beside the point...
+
+Chirpy uses "Polka" as its payment provider. They send us webhooks whenever a user subscribes to Chirpy Red. We need to mark users as Chirpy Red members when we receive these webhooks.
+
+Add a migration to the users table to include a new column called is_chirpy_red. This column should be a boolean, and it should default to false.
+Add a database query that upgrades a user to chirpy red based on their ID.
+Add a POST /api/polka/webhooks endpoint. It should accept a request of this shape:
+{
+  "event": "user.upgraded",
+  "data": {
+    "user_id": "3311741c-680c-4546-99f3-fc9efac2036c"
+  }
+}
+
+If the event is anything other than user.upgraded, the endpoint should immediately respond with a 204 status code - we don't care about any other events.
+If the event is user.upgraded, then it should update the user in the database, and mark that they are a Chirpy Red member.
+If the user is upgraded successfully, the endpoint should respond with a 204 status code and an empty response body. If the user can't be found, the endpoint should respond with a 404 status code.
+Polka uses the response code to know whether or not the webhook was received successfully. If the response code is anything other than 2XX, they'll retry the request.
+
+Update all endpoints that return user resources to include the is_chirpy_red field.
 
 psql "postgres://carlosinfante:@localhost:5432/chirpy"
 
