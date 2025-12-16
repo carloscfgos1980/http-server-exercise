@@ -1183,6 +1183,26 @@ A good use-case for cookies is to serve as a more strict and secure transport la
 
 For example, when using httpOnly cookies, you can ensure that 3rd party JavaScript that's being executed on your website can't access any cookies. That's a lot better than storing JWTs in the browser's local storage, where it's easily accessible to any JavaScript running on the page.
 
+# 7 AUTHORIZATION
+
+# 7.1 Authorization
+
+While authentication is about verifying who a user is, authorization is about verifying what a user is allowed to do.
+
+For example, a hypothetical YouTuber ThePrimeagen should be allowed to edit and delete the videos on his account, and everyone should be allowed to view them. Another absolutely-not-real YouTuber TEEJ should be able to view ThePrimeagen's videos, but not edit or delete them.
+
+Authorization logic is just the code that enforces these kinds of rules.
+
+Assignment
+We already have a bit of authorization built into Chirpy: authenticated users can only create chirps for themselves, not for others.
+
+Add a PUT /api/users endpoint so that users can update their own (but not others') email and password. It requires:
+An access token in the header
+A new password and email in the request body
+Hash the password, then update the hashed password and the email for the authenticated user in the database. Respond with a 200 if everything is successful and the newly updated User resource (omitting the password of course).
+If the access token is malformed or missing, respond with a 401 status code.
+
+# 7.2
 
 psql "postgres://carlosinfante:@localhost:5432/chirpy"
 
