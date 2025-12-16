@@ -1071,9 +1071,121 @@ Once you have the token created with the new params, respond to the request with
 
 Update the POST /api/chirps endpoint. It is not an authenticated endpoint yet. To post a chirp, a user needs to have a valid JWT. The JWT will determine which user is posting the chirp. Use your GetBearerToken and ValidateJWT functions. If the JWT is invalid, return a 401 Unauthorized response.
 
-# 6.4 
+# 6.4 JWT Review
+
+JWTs are cryptographically signed JSON objects that contain information about an authenticated user.
+
+I've heard "JWT" pronounced as "jot", but I pronounce it "jay double yoo tee".
+JWTs Can't Be Changed
+We'll talk about MACs, HMACs, and digital signatures in a later course, which are the cryptographic concepts that power JWTs. For now, it's just important to know that once the token is created by a server, the data in the token can't be changed without the server being aware of it.
+
+When your server issues a JWT to Bob, Bob can use that token to make requests as Bob to your API. Bob won't be able to change the token to make requests as Alice.
+
+JWTs Are Not Encrypted
+JWTs are not encrypted. Anyone who has the token can read the data (like the expiry and the user id) in the token. This is why you should never store sensitive information in a JWT. It's just a way to authenticate a user.
+
+I like using JWT.io to inspect JWTs. It is a great tool for playing around with them and learning how they work.
+
+# 6.5 Revoking JWTs
+
+One of the main benefits of JWTs is that they're stateless. The server doesn't need to keep track of which users are logged in via JWT. The server just needs to issue a JWT to a user and the user can use that JWT to authenticate themselves. Statelessness is fast and scalable because your server doesn't need to consult a database to see if a user is currently logged in.
+
+However, that same benefit poses a potential problem. JWTs can't be revoked. If a user's JWT is stolen, there's no easy way to stop the JWT from being used. JWTs are just a signed string of text.
+
+The JWTs we've been using so far are more specifically access tokens. Access tokens are used to authenticate a user to a server, and they provide access to protected resources. Access tokens are:
+
+Stateless
+Short-lived (15m-24h)
+Irrevocable
+They must be short-lived because they can't be revoked. The shorter the lifespan, the more secure they are. Trouble is, this can create a poor user experience. We don't want users to have to log in every 15 minutes.
+
+A Solution: Refresh Tokens
+Refresh tokens don't provide access to resources directly, but they can be used to get new access tokens. Refresh tokens are much longer lived, and importantly, they can be revoked. They are:
+
+Stateful
+Long-lived (24h-60d)
+Revocable
+Now we get the best of both worlds! Our endpoints and servers that provide access to protected resources can use access tokens, which are fast, stateless, simple, and scalable. On the other hand, refresh tokens are used to keep users logged in for longer periods of time, and they can be revoked if a user's access token is compromised.
+
+# 6.6 Refresh Tokens
+
+To allow our users to stay logged in for longer periods, let's add refresh tokens to our authentication system. At the same time, we'll reduce the lifespan of our access tokens to improve security.
+
+Session Store
+In our case, a refresh token will just be a random 256-bit string. It's a token, but not a JSON Web Token. It doesn't need to be a JWT because we'll store it in our database and associate it with a user server-side. No point in using stateless JWTs if we're going to store them in a database anyway.
+
+To revoke a refresh token, we'll set a revoked_at timestamp in the database. If revoked_at is not null, the token is revoked and will be considered invalid.
+
+Assignment
+Create a new database table with up/down migrations called refresh_tokens.
+token: the primary key - it's just a string
+created_at
+updated_at
+user_id: foreign key that deletes the row if the user is deleted
+expires_at: the timestamp when the token expires
+revoked_at: the timestamp when the token was revoked (null if not revoked)
+Add a func MakeRefreshToken() (string, error) function to your internal/auth package. It should use the following to generate a random 256-bit (32-byte) hex-encoded string:
+rand.Read to generate 32 bytes (256 bits) of random data from the crypto/rand package (math/rand's Read function is deprecated).
+hex.EncodeToString to convert the random data to a hex string
+Update the POST /api/login endpoint to return a refresh token, as well as an access token:
+Access tokens (JWTs) should expire after 1 hour. Expiration time is stored in the exp claim. You can remove the optional expires_in_seconds parameter from the endpoint.
+Refresh tokens should expire after 60 days. Expiration time is stored in the database.
+The revoked_at field should be null when the token is created.
+{
+  "id": "5a47789c-a617-444a-8a80-b50359247804",
+  "created_at": "2021-07-01T00:00:00Z",
+  "updated_at": "2021-07-01T00:00:00Z",
+  "email": "<lane@example.com>",
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",
+  "refresh_token": "56aa826d22baab4b5ec2cea41a59ecbba03e542aedbb31d9b80326ac8ffcfa2a"
+}
+
+Create a POST /api/refresh endpoint. This new endpoint does not accept a request body, but does require a refresh token to be present in the headers, in the same Authorization: Bearer <token> format.
+Look up the token in the database. If it doesn't exist, or if it's expired, respond with a 401 status code. Otherwise, respond with a 200 code and this shape:
+
+{
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"
+}
+
+The token field should be a newly created access token for the given user that expires in 1 hour. I wrote a GetUserFromRefreshToken SQL query.
+
+Create a new POST /api/revoke endpoint. This new endpoint does not accept a request body, but does require a refresh token to be present in the headers, in the same Authorization: Bearer <token> format.
+Revoke the token in the database that matches the token that was passed in the header of the request by setting the revoked_at to the current timestamp. Remember that any time you update a record, you should also be updating the updated_at timestamp.
+
+Respond with a 204 status code. A 204 status means the request was successful but no body is returned.
+
+# 6.7 Cookies
+
+HTTP cookies are one of the most talked about, but least understood, aspects of the web.
+
+When cookies are talked about in the news, they're usually implied to simply be privacy-stealing bad guys. While cookies can certainly invade your privacy, that's not what they are.
+
+What Is an HTTP Cookie?
+A cookie is a small piece of data that a server sends to a client. The client then dutifully stores the cookie and sends it back to the server on subsequent requests.
+
+Cookies can store any arbitrary data:
+
+A user's name or other tracking information
+A JWT (refresh and access tokens)
+Items in a shopping cart
+etc.
+The server decides what to put in a cookie, and the client's job is simply to store it and send it back.
+
+How Do Cookies Work?
+Simply put, cookies work through HTTP headers.
+
+Cookies are sent from the server to the client in the Set-Cookie header. Cookies are most popular for web (browser-based) applications because browsers automatically send any cookies they have back to the server in the Cookie header.
+
+Why Aren't We Using Cookies?
+Simply put, Chirpy's API is designed to be consumed by mobile apps and other servers. Cookies are primarily for browsers.
+
+A good use-case for cookies is to serve as a more strict and secure transport layer for JWTs within the context of a browser-based application.
+
+For example, when using httpOnly cookies, you can ensure that 3rd party JavaScript that's being executed on your website can't access any cookies. That's a lot better than storing JWTs in the browser's local storage, where it's easily accessible to any JavaScript running on the page.
 
 
 psql "postgres://carlosinfante:@localhost:5432/chirpy"
 
 goose -dir sql/schema postgres "postgres://carlosinfante:@localhost:5432/chirpy" up
+
+
